@@ -24,16 +24,15 @@ Usage:
     --checker-ms 4580
 """
 
-import argparse
-import csv
-import json
-import sys
-from collections import defaultdict
-from pathlib import Path
+import argparse #handles command-lines flags
+import csv      #reads event logs
+import json     #reads CodeChecker export
+import sys      #output formatting
+from pathlib import Path    #cross-platform file handling
 
 
 def load_events(log_path: str) -> list[dict]:
-    """Parse the CSV event log written by the checker."""
+    #Parse the CSV event log written by the checker.
     path = Path(log_path)
     if not path.exists():
         print(f"[WARN] Event log not found: {log_path}", file=sys.stderr)
@@ -47,7 +46,7 @@ def load_events(log_path: str) -> list[dict]:
 
 
 def load_codechecker_json(cc_path: str) -> list[dict]:
-    """Parse CodeChecker --export json output."""
+    #Parse CodeChecker --export json output.
     path = Path(cc_path)
     if not path.exists():
         print(f"[WARN] CodeChecker JSON not found: {cc_path}", file=sys.stderr)
@@ -62,9 +61,7 @@ def load_codechecker_json(cc_path: str) -> list[dict]:
 
 
 def compute_table81(events: list[dict], reports: list[dict]) -> dict:
-    """
-    Table 8.1: |B|, |EB|, Nrec, Npad, NE2, NE3
-    """
+    #Table 8.1: |B|, |EB|, Nrec, Npad, NE2, NE3
     boundary_fns = set()
     all_record_types = set()
     padded_types = set()
@@ -104,10 +101,8 @@ def compute_table81(events: list[dict], reports: list[dict]) -> dict:
 
 
 def compute_table82(events: list[dict], t81: dict) -> dict:
-    """
-    Table 8.2: Nsup, rpad, rdiag, revent
-    Nsup = events where has_padding=true but diag_emitted=false (suppressed)
-    """
+    #Table 8.2: Nsup, rpad, rdiag, revent
+    #Nsup = events where has_padding=true but diag_emitted=false (suppressed)
     Nsup = sum(
         1 for e in events
         if e.get("has_padding", "false").lower() == "true"
@@ -133,7 +128,7 @@ def compute_table82(events: list[dict], t81: dict) -> dict:
 
 
 def compute_table83(baseline_ms: int, checker_ms: int) -> dict:
-    """Table 8.3: timing and overhead."""
+    #Table 8.3: timing and overhead.
     if baseline_ms > 0 and checker_ms > 0:
         overhead = 100 * (checker_ms - baseline_ms) / baseline_ms
     else:

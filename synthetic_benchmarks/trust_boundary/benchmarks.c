@@ -5,7 +5,7 @@
  *   clang -I../../include -fsyntax-only case01_padding_uninit_pass.c
  *
  * Run checker:
- *   clang-tidy -load TlsTidyModule.so \
+ *   clang-tidy -load SecurityMiscPlugin.so \
  *     -checks='-*,security-misc-padding-boundary-leak' \
  *     -p compile_commands.json \
  *     case*.c

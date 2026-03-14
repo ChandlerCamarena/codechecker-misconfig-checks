@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# build.sh — builds TlsTidyModule.so
-# Works on Arch Linux (LLVM 21 via pacman) and Ubuntu (LLVM 18 via apt).
+# build.sh — builds SecurityMiscPlugin.so
+# Works on Arch Linux (LLVM 21 via pacman)
+# ============================================================================
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -21,7 +22,7 @@ cmake --build "$ROOT/build"
 
 echo ""
 echo "=== Build complete ==="
-echo "    Plugin: $ROOT/build/TlsTidyModule.so"
+echo "    Plugin: $ROOT/build/SecurityMiscPlugin.so"
 echo ""
 echo "To verify the plugin loads:"
-echo "    clang-tidy -load $ROOT/build/TlsTidyModule.so -list-checks 2>/dev/null | grep -E 'tls-|security-misc'"
+echo "    clang-tidy -load $ROOT/build/SecurityMiscPlugin.so -checks='*' -list-checks 2>/dev/null | grep security-misc"

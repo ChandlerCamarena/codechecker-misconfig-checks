@@ -8,8 +8,6 @@
 namespace clang::tidy {
 
 /**
- * security-misc-padding-boundary-leak
- *
  * Detects record objects transferred by value across explicitly annotated
  * trust boundaries when the record type contains ABI-introduced padding
  * bytes that may not be fully initialized (thesis Chapter 6–7).
@@ -17,14 +15,8 @@ namespace clang::tidy {
  * Evidence levels (Chapter 5):
  *   E3 (high confidence)  — padding present + field-wise-only init visible
  *   E2 (bounded)          — padding present + initialization not determinable
- *
- * Suppressed when dominating whole-object initialization is syntactically
- * visible (e.g., T v = {0} or memset(&v, 0, sizeof v)).
- *
- * Event logging:
- *   Set the environment variable PADDING_LEAK_LOG=/path/to/events.csv before
- *   running clang-tidy to collect structured event records for Table 8.1/8.2.
  */
+
 class TrustBoundaryPaddingLeakCheck : public ClangTidyCheck {
 public:
   TrustBoundaryPaddingLeakCheck(StringRef Name, ClangTidyContext *Context)
@@ -34,10 +26,10 @@ public:
   void check(const ast_matchers::MatchFinder::MatchResult &Result) override;
 
 private:
-  // Returns true if FD carries annotate("trust_boundary").
+  // Returns true if FunctionDecl carries annotate("trust_boundary").
   static bool isTrustBoundary(const FunctionDecl *FD);
 
-  // Returns true if the record type RD has any padding bytes under the
+  // Returns true if the record type RecordDecl has any padding bytes under the
   // current ABI (field gaps or tail padding).
   static bool computeHasPadding(const RecordDecl *RD, ASTContext &Ctx);
 
@@ -66,4 +58,4 @@ private:
 
 } // namespace clang::tidy
 
-#endif // TRUST_BOUNDARY_PADDING_LEAK_CHECK_H
+#endif

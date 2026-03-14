@@ -6,7 +6,7 @@
     "Or:    CodeChecker parse ./cc-results --export json -o results.json",
     "",
     "IMPORTANT: set PLUGIN_PATH below to the absolute path of your built .so,",
-    "e.g.  /home/user/clang-tidy-tls-checks/build/TlsTidyModule.so"
+    "e.g.  /home/user/clang-tidy-tls-checks/build/SecurityMiscPlugin.so"
   ],
   "analyze": [
     "--analyzers", "clang-tidy",

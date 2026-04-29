@@ -19,5 +19,5 @@ synthetic_events.csv
 _reproduce/
 _results/
 _logs/
-build/
-build/
+compile_commands.json
+.cache/

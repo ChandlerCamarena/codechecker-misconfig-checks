@@ -19,3 +19,6 @@ synthetic_events.csv
 _reproduce/
 _results/
 _logs/
+compile_commands.json
+.cache/
+.codechecker-env/

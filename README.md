@@ -19,17 +19,17 @@ The thesis PDF is included in this repository as `Camarena_Thesis.pdf`.
 ## Quick Start
 
 ```bash
-# 1. Build the plugin
-bash scripts/build.sh
-
-# 2. Run the synthetic benchmark suite (Appendix A)
-bash scripts/run_synthetic.sh
-
-# 3. Reproduce the full thesis evaluation (requires cloning evaluated libraries)
-bash scripts/reproduce_all.sh
+git clone https://github.com/ChandlerCamarena/clang-padding-leakage-checker.git
+cd clang-padding-leakage-checker
+bash setup.sh
 ```
 
-See [Building](#building) and [Reproducing the Thesis Evaluation](#reproducing-the-thesis-evaluation) below for prerequisites and details.
+That's it. `setup.sh` installs all dependencies, builds the plugin, runs the
+synthetic benchmark suite, and reproduces the full thesis evaluation.
+
+See [Manual Setup](#manual-setup) below if you need finer control, want to
+run on an unsupported OS, or are integrating the checker into an existing
+workflow.
 
 ---
 
@@ -47,16 +47,18 @@ clang-padding-leakage-checker/
 │   └── module/
 │       └── SecurityMiscModule.cpp               # plugin entry point
 ├── synthetic_benchmarks/
-│   └── benchmarks.c                  # all 8 validation cases (Appendix A)
+│   ├── trust_boundary/
+│   │   └── benchmarks.c              # all 8 validation cases (Appendix A)
+│   └── cross_family/
+│       └── tb_representation_leak_crypto.c      # cross-family DM+CM example
 ├── evaluated_libraries/              # annotated versions of the 4 evaluated projects
 │   ├── README.md                     # what was annotated and why
-│   ├── zlib/                         # annotated source files only
+│   ├── zlib/
 │   ├── libuv/
 │   ├── raylib/
 │   └── chipmunk2d/
 ├── scripts/
-│   ├── build.sh                      # build the plugin
-│   ├── run_synthetic.sh              # run and validate synthetic benchmarks
+│   ├── build.sh                      # build the plugin against LLVM 21
 │   ├── run_codechecker.sh            # run CodeChecker on a single project
 │   ├── collect_metrics.py            # parse event log → thesis Tables 8.2–8.3
 │   └── reproduce_all.sh             # clone libraries, apply annotations, run all
@@ -85,42 +87,76 @@ The checker assigns one of two evidence levels (thesis §5.6):
 
 ---
 
-## Building
+## Manual Setup
 
-### Prerequisites
+Use this if `setup.sh` doesn't cover your environment, or if you want to
+run steps individually.
+
+### Supported platforms
+
+| OS | Status |
+|---|---|
+| Arch Linux | ✅ Evaluated environment |
+| Ubuntu 24.04 | ✅ Best effort |
+| macOS | ❌ Not supported |
+| Windows | ❌ Not supported |
+
+### Step 1 — Install LLVM 21 and build tools
+
+The thesis evaluation used **LLVM/Clang 21.1.8** and **CodeChecker 6.27.3**.
+The plugin must be built against the same LLVM version that `clang-tidy` uses
+to load it — mismatched versions will cause the plugin to fail silently or crash.
 
 **Arch Linux**
+
 ```bash
-sudo pacman -S clang llvm cmake ninja python
+sudo pacman -S llvm21 clang21 cmake ninja python git
 ```
+
+LLVM 21 installs to `/usr/lib/llvm21/bin/`. Your system `clang` may point to
+a newer version — that is fine. The build scripts use the full path explicitly.
 
 **Ubuntu 24.04**
+
 ```bash
-sudo apt install clang-18 llvm-18-dev clang-tidy-18 cmake ninja-build python3
+wget https://apt.llvm.org/llvm.sh
+chmod +x llvm.sh
+sudo ./llvm.sh 21
+sudo apt install clang-tidy-21 cmake ninja-build python3 python3-venv git
 ```
 
-The LLVM version used to build the plugin and the `clang-tidy` binary that
-loads it **must match**. Verify before building:
+On Ubuntu, binaries install to `/usr/bin/` with a `-21` suffix. Update the
+`LLVM21` variable in `scripts/build.sh` and `scripts/reproduce_all.sh` from
+`/usr/lib/llvm21` to `/usr/bin` before building.
+
+### Step 2 — Install CodeChecker
+
+CodeChecker must be installed in a Python virtual environment:
 
 ```bash
-clang --version
-llvm-config --version
+python3 -m venv .codechecker-env
+source .codechecker-env/bin/activate
+pip install codechecker
+CodeChecker --version   # verify
 ```
 
-The thesis evaluation was run on LLVM/Clang 21.1.8 and CodeChecker 6.27.3.
+> You must activate the venv (`source .codechecker-env/bin/activate`) in any
+> new shell session before running `reproduce_all.sh` or `run_codechecker.sh`.
 
-### Compile
+### Step 3 — Build the plugin
 
 ```bash
+source .codechecker-env/bin/activate
 bash scripts/build.sh
 ```
 
 Output: `build/SecurityMiscPlugin.so`
 
-### Verify the plugin loads
+Verify the plugin loads correctly:
 
 ```bash
-clang-tidy -load build/SecurityMiscPlugin.so \
+/usr/lib/llvm21/bin/clang-tidy \
+  -load build/SecurityMiscPlugin.so \
   -checks='*' -list-checks 2>/dev/null | grep security-misc
 ```
 
@@ -137,20 +173,25 @@ security-misc-padding-boundary-leak
 
 The four libraries from the thesis evaluation are included in
 `evaluated_libraries/` with `TRUST_BOUNDARY` annotations already applied.
-`reproduce_all.sh` clones each library, copies the annotated files in, and
-runs everything automatically — no manual annotation needed.
+`reproduce_all.sh` clones each library at the exact thesis version, copies
+the annotated files in, builds with Clang 21, runs CodeChecker, and prints
+the metrics from Tables 8.2 and 8.3 — no manual annotation needed.
 
 ```bash
+source .codechecker-env/bin/activate
 bash scripts/reproduce_all.sh
 ```
 
-See [Reproducing the Thesis Evaluation](#reproducing-the-thesis-evaluation)
-for details on what each project demonstrates.
+> **Note on build warnings:** libuv, raylib, and Chipmunk2D have minor
+> compatibility issues with Clang 21 in some internal implementation files.
+> These produce compile errors in non-annotated files but do not affect the
+> annotated boundary functions or the reported metrics. The checker correctly
+> analyzes all annotated sites and reproduces the thesis results exactly.
 
 ### On a single file
 
 ```bash
-clang-tidy \
+/usr/lib/llvm21/bin/clang-tidy \
   -load build/SecurityMiscPlugin.so \
   -checks='-*,security-misc-padding-boundary-leak' \
   your_file.c -- -I./include
@@ -158,61 +199,67 @@ clang-tidy \
 
 ### Via CodeChecker on a project with a compilation database
 
-Install CodeChecker:
 ```bash
-pip install codechecker
-```
-
-Run the evaluation pipeline:
-```bash
+source .codechecker-env/bin/activate
 export PADDING_LEAK_LOG=./events.csv
 bash scripts/run_codechecker.sh /path/to/project /path/to/compile_commands.json
+```
+
+Generate `compile_commands.json` for CMake projects:
+
+```bash
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DCMAKE_C_COMPILER=/usr/lib/llvm21/bin/clang \
+      -DCMAKE_CXX_COMPILER=/usr/lib/llvm21/bin/clang++ \
+      ...
 ```
 
 ---
 
 ## Annotating Your Own Project
 
-To run the checker on a project not included here, you need to mark which
-functions represent trust-boundary crossings. The checker will only flag
-by-value record transfers at functions you explicitly annotate — it does not
-infer boundaries automatically (see [Known Limitations](#known-limitations)).
+The checker only flags by-value record transfers at functions you explicitly
+annotate — it does not infer boundaries automatically (see
+[Known Limitations](#known-limitations)).
 
 **Step 1 — Include the annotation header**
 
 Copy `include/trust_boundary.h` into your project or add `include/` to your
-compiler's include path.
+compiler's include path. The macro expands to
+`__attribute__((annotate("trust_boundary")))` under Clang/GCC and is a
+no-op everywhere else.
 
 **Step 2 — Annotate boundary functions**
 
 Add `TRUST_BOUNDARY` to any function declaration whose by-value record
-arguments or return values cross a trust domain:
+arguments or return values cross a trust domain. Annotate the declaration,
+not just the definition:
 
 ```c
 #include "trust_boundary.h"
 
-/* Annotate the declaration, not just the definition */
 TRUST_BOUNDARY int send_packet(struct Packet pkt);
 TRUST_BOUNDARY struct Reply receive_reply(void);
 ```
 
-`TRUST_BOUNDARY` expands to `__attribute__((annotate("trust_boundary")))` under
-Clang/GCC and is silently ignored by other compilers and tools.
-
-A function is a good candidate for annotation if it:
+A function is a good candidate if it:
 - is externally visible on a public API surface,
 - accepts or returns a struct or class object by value, and
-- represents a conceptual transition between components with different
-  confidentiality assumptions (e.g., library-internal state to external caller,
-  trusted enclave to untrusted host, kernel to userspace).
+- represents a transition between components with different confidentiality
+  assumptions (e.g., library-internal state to external caller, trusted
+  enclave to untrusted host, kernel to userspace).
 
-**Step 3 — Generate a compilation database and run**
+**Step 3 — Build with Clang 21 and run**
 
 ```bash
-# CMake projects
-cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ...
+# Generate compile_commands.json
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+      -DCMAKE_C_COMPILER=/usr/lib/llvm21/bin/clang \
+      -DCMAKE_CXX_COMPILER=/usr/lib/llvm21/bin/clang++ \
+      ...
 
-# Then run the checker
+# Run the checker
+source .codechecker-env/bin/activate
 export PADDING_LEAK_LOG=./events.csv
 bash scripts/run_codechecker.sh /path/to/project compile_commands.json
 ```
@@ -221,11 +268,14 @@ bash scripts/run_codechecker.sh /path/to/project compile_commands.json
 
 ## Synthetic Benchmark Suite (Appendix A)
 
-`synthetic_benchmarks/benchmarks.c` contains all 8 validation cases from
-Appendix A. Run and validate in one step:
+`synthetic_benchmarks/trust_boundary/benchmarks.c` contains all 8 validation
+cases from Appendix A:
 
 ```bash
-bash scripts/run_synthetic.sh
+/usr/lib/llvm21/bin/clang-tidy \
+  -load build/SecurityMiscPlugin.so \
+  -checks='-*,security-misc-padding-boundary-leak' \
+  synthetic_benchmarks/trust_boundary/benchmarks.c -- -I./include
 ```
 
 Expected results:
@@ -248,20 +298,32 @@ not yet implemented (see [Known Limitations](#known-limitations)).
 
 ## Reproducing the Thesis Evaluation
 
-`scripts/reproduce_all.sh` clones each evaluated library at the exact
-commit used in the thesis, copies the annotated boundary files from
-`evaluated_libraries/`, builds the checker, runs CodeChecker on each project,
-and collects the metrics reported in Tables 8.2 and 8.3.
+`scripts/reproduce_all.sh` performs the full reproduction in one command:
+
+1. Builds the checker plugin against LLVM 21
+2. Runs the synthetic benchmark suite
+3. Clones each evaluated library at the exact thesis version
+4. Applies the `TRUST_BOUNDARY` annotations from `evaluated_libraries/`
+5. Builds each library with Clang 21 to generate `compile_commands.json`
+6. Runs CodeChecker on each library
+7. Prints the metrics from Tables 8.2 and 8.3
 
 ```bash
+source .codechecker-env/bin/activate
 bash scripts/reproduce_all.sh
 ```
 
-The script will print per-project event counts, padding rates, diagnostic
-counts, and overhead figures matching the thesis results.
+Expected output matches thesis Tables 8.2 and 8.3:
 
-See `evaluated_libraries/README.md` for the list of annotated functions,
-exact library versions, and what the annotations represent.
+| Project | \|B\| | \|EB\| | Nrec | Npad | NE2 | NE3 | Nsup | rpad | rdiag |
+|---|---|---|---|---|---|---|---|---|---|
+| zlib | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.000 | 0.000 |
+| libuv | 1 | 2 | 1 | 0 | 0 | 0 | 0 | 0.000 | 0.000 |
+| raylib | 5 | 20 | 3 | 1 | 0 | 0 | 8 | 0.333 | 0.000 |
+| chipmunk2d | 3 | 6 | 2 | 1 | 4 | 0 | 0 | 0.500 | 0.667 |
+
+Full logs are written to `_logs/` and CodeChecker results to `_results/`.
+See `evaluated_libraries/README.md` for per-project annotation details.
 
 ---
 
@@ -274,8 +336,9 @@ cpArbiter.c:87:10: warning: [E2] boundary transfer of 'cpContactPointSet'
 (56 bytes, 4 padding bytes) by value at trust boundary
 'cpArbiterGetContactPointSet': the ABI copies the full object representation
 including padding bytes that may contain indeterminate or stale data.
-Remediation: (a) zero-initialize before assignment (e.g., `cpContactPointSet v = {0};`),
-or (b) serialise only semantic fields into an explicit boundary buffer.
+Remediation: (a) zero-initialize before assignment
+(e.g., `cpContactPointSet v = {0};`), or (b) serialise only semantic fields
+into an explicit boundary buffer.
 [security-misc-padding-boundary-leak]
 ```
 
@@ -289,8 +352,8 @@ Documented as future work in Chapter 9 of the thesis:
   `memset(&obj, 0, sizeof obj)` is not yet recognized as a suppression
   condition. The `= {0}` idiom is correctly handled. (§9.1)
 - **No interprocedural analysis** — initialization through helper functions
-  defined in separate translation units is not tracked. All real-world findings
-  are therefore classified E2 rather than E3. (§9.3)
+  defined in separate translation units is not tracked. All real-world
+  findings are therefore classified E2 rather than E3. (§9.3)
 - **No pointer or alias tracking** — only by-value transfers are modeled;
   pointer-mediated transfers require alias analysis and are out of scope. (§9.4)
 - **Explicit boundary annotations required** — `TRUST_BOUNDARY` must be added
